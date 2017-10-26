@@ -77,12 +77,12 @@ an `example.sml.mlb` file:
 ```sml
 local
   $(SML_LIB)/basis/basis-1997.mlb
-  "/path/to/moduleA.mlb"
+  "/path/to/moduleA.sig.mlb"
 
   local
-    "../path/to/moduleB.mlb"
+    "../path/to/moduleB.fun.mlb"
   in
-    signature X
+    functor X
     structure Z = Y
   end
 
@@ -104,10 +104,10 @@ will contain:
 local 
   local
     $(SML_LIB)/basis/basis-1997.mlb
-    "/path/to/moduleA.mlb"
+    "/path/to/moduleA.sig.mlb"
 
     local
-      "../path/to/moduleB.mlb"
+      "../path/to/moduleB.fun.mlb"
     in
       functor X
       structure Z = Y
