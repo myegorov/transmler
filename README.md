@@ -19,7 +19,10 @@ The goal is to develop a proof of concept for a transpiler step added to
 an [MLBasis](http://mlton.org/MLBasis) based compilation workflow and test 
 it on a non-trivial SML project. It should be emphasized
 that no changes are planned to how MLBasis manages the namespaces
-behind the scenes.
+behind the scenes. A subset of 
+[MLBasis](http://mlton.org/MLBasisSyntaxAndSemantics)
+will be supported (excluding `ann`, `open`, `basis` and basis expression
+constructs).
 
 
 # Use case
@@ -128,8 +131,7 @@ would effectively export all its top-level identifiers.
 
 # Roadmap
 
-- specify the DSL grammar for imports (`qualified, unqualified, hiding`)
-    and exports;
+- specify the DSL grammar for imports and exports;
 - lexer + parser;
 - think about how to provide bi-directional source maps between the DSL 
     original and _transmiled_ sources for debugging; 
