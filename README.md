@@ -20,9 +20,8 @@ an [MLBasis](http://mlton.org/MLBasis) based compilation workflow and test
 it on a non-trivial SML project. It should be emphasized
 that no changes are planned to how MLBasis manages the namespaces
 behind the scenes. A subset of 
-[MLBasis](http://mlton.org/MLBasisSyntaxAndSemantics)
-will be supported (excluding `ann`, `open`, `basis` and basis expression
-constructs).
+[MLBasis](http://mlton.org/MLBasisSyntaxAndSemantics) constructs
+will be supported (excluding `ann`).
 
 
 # Use case
@@ -48,14 +47,14 @@ didn't transpile, with the exception of explicitly excluded files.
 
 `import` and `export` statements in a `*b` source file must come before any
 SML program, except that SML-style comments are allowed within the
-import/export block (however MLton line directives may need to be
-reserved for own use).
+import/export block. Comments within the import/export block will be
+ignored, but MLton line directives will be inserted into resulting files.
 
 The syntax for importing entities is any combination of:
 ```
 import $(SML_LIB)/basis/basis-1997.mlb
 import "/path/to/moduleA.sigb"
-import (functor X, structure Y as Z) from "../path/to/moduleB.funb"
+import (functor X, structure Z = Y) from "../path/to/moduleB.funb"
 ```
 
 By default, every module will implicitly import the SML Basis library
@@ -66,37 +65,49 @@ By default, every module will implicitly import the SML Basis library
 `$(SML_LIB)` root) in this order:
 * searching the directory relative to the `*b` source file (except
     where an absolute path is specified);
-* followed by the environment variable `SMLPATH` (if set);
+* followed by the environment variable `SMLPATH` (set to, e.g.,
+    `<project-root>/src:<project-root>/sml-modules` in the `Makefile`);
 * followed by any installation-dependent default search path (shell `PATH`).
 
 For example, resolving `import X.sigb` entails looking up `./X.sig.mlb`,
 then `<($SMLPATH)>/X.sig.mlb`, then `<($PATH)>/X.sig.mlb`, and returning with
 an error if none is found.
 
-Assuming the above import statements are placed in an `example.smlb`, the
-outcome will be an `example.sml` file with the SML program, plus
+Assuming the above import statements are placed in an `example.smlb`, 
+and that all the referenced `*.mlb` files can be found relative to the
+location of `example.smlb`,
+the outcome will be an `example.sml` file with the SML program, plus
 an `example.sml.mlb` file:
 
 ```sml
-local
-  $(SML_LIB)/basis/basis-1997.mlb
-  "/path/to/moduleA.sig.mlb"
+(* #line 1.1 "example.smlb" *)local
+  basis a = bas (* #line 1.8 "example.smlb" *)$(SML_LIB)/basis/basis-1997.mlb end
+  basis b = bas (* #line 2.8 "example.smlb" *)"/path/to/moduleA.sig.mlb" end
+  basis c =
+    let
+      local
+        (* #line 3.42 "example.smlb" *)"../path/to/moduleB.fun.mlb"
+      in
+        basis d =
+          bas
+            (* #line 3.9 "example.smlb" *)functor X
+            (* #line 3.20 "example.smlb" *)structure Z = Y
+          end
+      end
+    in
+      d
+    end
 
-  local
-    "../path/to/moduleB.fun.mlb"
-  in
-    functor X
-    structure Z = Y
-  end
+  open a b c
 
 in
-  imports.sml
+  example.sml
 end
 ```
 
 The syntax for exporting entities is along the lines of:
 ```
-export (signature K, structure L as M)
+export (signature K, structure M = L)
 ```
 
 Assuming this `export` statement follows the `import` statements in the
@@ -104,34 +115,46 @@ above `example.smlb`, the resulting `example.sml.mlb`
 will contain:
 
 ```sml
-local 
-  local
-    $(SML_LIB)/basis/basis-1997.mlb
-    "/path/to/moduleA.sig.mlb"
+(* #line 1.1 "example.smlb" *)local
 
-    local
-      "../path/to/moduleB.fun.mlb"
-    in
-      functor X
-      structure Z = Y
-    end
+  local
+    basis a = bas (* #line 1.8 "example.smlb" *)$(SML_LIB)/basis/basis-1997.mlb end
+    basis b = bas (* #line 2.8 "example.smlb" *)"/path/to/moduleA.sig.mlb" end
+    basis c =
+      let
+        local
+          (* #line 3.42 "example.smlb" *)"../path/to/moduleB.fun.mlb"
+        in
+          basis d =
+            bas
+              (* #line 3.9 "example.smlb" *)functor X
+              (* #line 3.20 "example.smlb" *)structure Z = Y
+            end
+        end
+      in
+        d
+      end
+
+    open a b c
 
   in
-    imports.sml
+    example.sml
   end
+
 in
-  signature K
-  structure M = L
+  (* #line 4.9 "example.smlb" *)signature K
+  (* #line 4.22 "example.smlb" *)structure M = L
 end
 ```
 
-If an `export` statement were missing from `imports.smlb`, the module 
+If an `export` statement were missing from `example.smlb`, the module
 would effectively export all its top-level identifiers.
 
 
 # Roadmap
 
 - specify the DSL grammar for imports and exports;
+- `transmile` CLI tool (source, destination, ignore/copy, edit/print $SMLPATH)
 - lexer + parser;
 - think about how to provide bi-directional source maps between the DSL 
     original and _transmiled_ sources for debugging; 
