@@ -46,9 +46,8 @@ With the above flags, it will also copy any files that it
 didn't transpile, with the exception of explicitly excluded files.
 
 `import` and `export` statements in a `*b` source file must come before any
-SML program, except that SML-style comments are allowed within the
-import/export block. Comments within the import/export block will be
-ignored, but MLton line directives will be inserted into resulting files.
+SML program, except that SML-style comments (and line directives) are 
+allowed within the import/export block.
 
 The syntax for importing entities is any combination of:
 ```
@@ -80,7 +79,7 @@ the outcome will be an `example.sml` file with the SML program, plus
 an `example.sml.mlb` file:
 
 ```sml
-(* #line 1.1 "example.smlb" *)local
+local
   basis a = bas (* #line 1.8 "example.smlb" *)$(SML_LIB)/basis/basis-1997.mlb end
   basis b = bas (* #line 2.8 "example.smlb" *)"/path/to/moduleA.sig.mlb" end
   basis c =
@@ -115,7 +114,7 @@ above `example.smlb`, the resulting `example.sml.mlb`
 will contain:
 
 ```sml
-(* #line 1.1 "example.smlb" *)local
+local
 
   local
     basis a = bas (* #line 1.8 "example.smlb" *)$(SML_LIB)/basis/basis-1997.mlb end
