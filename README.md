@@ -80,21 +80,16 @@ an `example.sml.mlb` file:
 
 ```sml
 local
-  basis a = bas (* #line 1.8 "example.smlb" *)$(SML_LIB)/basis/basis-1997.mlb end
-  basis b = bas (* #line 2.8 "example.smlb" *)"/path/to/moduleA.sig.mlb" end
+  basis a = bas (*#line 1.8 "example.smlb"*)$(SML_LIB)/basis/basis-1997.mlb end
+  basis b = bas (*#line 2.8 "example.smlb"*)"/path/to/moduleA.sig.mlb" end
   basis c =
     let
-      local
-        (* #line 3.42 "example.smlb" *)"../path/to/moduleB.fun.mlb"
-      in
-        basis d =
-          bas
-            (* #line 3.9 "example.smlb" *)functor X
-            (* #line 3.20 "example.smlb" *)structure Z = Y
-          end
-      end
+      (*#line 3.42 "example.smlb"*)"../path/to/moduleB.fun.mlb"
     in
-      d
+      bas
+        (*#line 3.9 "example.smlb"*)functor X
+        (*#line 3.20 "example.smlb"*)structure Z = Y
+      end
     end
 
   open a b c
@@ -115,34 +110,27 @@ will contain:
 
 ```sml
 local
-
   local
-    basis a = bas (* #line 1.8 "example.smlb" *)$(SML_LIB)/basis/basis-1997.mlb end
-    basis b = bas (* #line 2.8 "example.smlb" *)"/path/to/moduleA.sig.mlb" end
+    basis a = bas (*#line 1.8 "example.smlb"*)$(SML_LIB)/basis/basis-1997.mlb end
+    basis b = bas (*#line 2.8 "example.smlb"*)"/path/to/moduleA.sig.mlb" end
     basis c =
       let
-        local
-          (* #line 3.42 "example.smlb" *)"../path/to/moduleB.fun.mlb"
-        in
-          basis d =
-            bas
-              (* #line 3.9 "example.smlb" *)functor X
-              (* #line 3.20 "example.smlb" *)structure Z = Y
-            end
-        end
+        (*#line 3.42 "example.smlb"*)"../path/to/moduleB.fun.mlb"
       in
-        d
+        bas
+          (*#line 3.9 "example.smlb"*)functor X
+          (*#line 3.20 "example.smlb"*)structure Z = Y
+        end
       end
 
     open a b c
-
   in
     example.sml
   end
 
 in
-  (* #line 4.9 "example.smlb" *)signature K
-  (* #line 4.22 "example.smlb" *)structure M = L
+  (*#line 4.9 "example.smlb"*)signature K
+  (*#line 4.22 "example.smlb"*)structure M = L
 end
 ```
 
@@ -152,11 +140,9 @@ would effectively export all its top-level identifiers.
 
 # Roadmap
 
+- simple scripts for prototype
+- `ctags`-like tooling for jumping between the definitions and uses in
+    the DSL sources + autocomplete/show signature;
 - specify the DSL grammar for imports and exports;
 - `transmile` CLI tool (source, destination, ignore/copy, edit/print $SMLPATH)
-- lexer + parser;
-- think about how to provide bi-directional source maps between the DSL 
-    original and _transmiled_ sources for debugging; 
-    for starters use [line directives](http://mlton.org/LineDirective)?
-- `ctags`-like tooling for jumping between the definitions and uses in
-    the DSL sources;
+- eventually lexer + parser;
