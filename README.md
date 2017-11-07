@@ -102,6 +102,7 @@ end
 The syntax for exporting entities is along the lines of:
 ```
 export (signature K, structure M = L)
+(* +++ *) (* for the time being, 3+ plus signs signal end of import/export block *)
 ```
 
 Assuming this `export` statement follows the `import` statements in the
