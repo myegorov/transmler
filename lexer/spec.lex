@@ -14,6 +14,8 @@ fun eof () =
   in 
     if !nestedComment <> 0
     then err pos "EOF occurred within a comment."
+    else if !nestedParen <> 0
+    then err pos "EOF occurred within open parenthesis."
     else ();
     Tokens.EOF (pos,pos)
   end
@@ -24,6 +26,10 @@ fun incLine loc =
   inc lineNum;
   linePos := loc :: !linePos
 
+val path = ref ""
+val pathPos = ref 0
+fun appendToPath s = path := !path ^ s
+
 
 %%
 %s EXPORT IMPORT COMMENT;
@@ -31,6 +37,7 @@ alpha = [A-Za-z];
 numeric = [0-9];
 id = {alpha}({alpha}|{numeric}|'|_)*;
 ws = [\ \t\r\f\v\n];
+basis = ("$(SML_LIB)/")({alpha}|{numeric}|-|\.|\/)+;
 
 
 %%
@@ -39,12 +46,15 @@ ws = [\ \t\r\f\v\n];
 <INITIAL,EXPORT,IMPORT>{ws} => (continue());
 <INITIAL>"export"           => (YYBEGIN EXPORT;
                                 Tokens.EXPORT (yypos, yypos + size yytext));
+<INITIAL>"import"           => (YYBEGIN IMPORT;
+                                Tokens.IMPORT (yypos, yypos + size yytext));
+
 
 <EXPORT,IMPORT>"("          => (inc nestedParen;
                                 Tokens.LPAREN(yypos, yypos + 1));
 <EXPORT>")"                 => (dec nestedParen;
-                                if !nestedParen = 0 
-                                then YYBEGIN INITIAL 
+                                if !nestedParen = 0
+                                then YYBEGIN INITIAL
                                 else ();
                                 Tokens.RPAREN(yypos, yypos + 1));
 <EXPORT,IMPORT>"signature"  => (Tokens.SIG (yypos, yypos + size yytext));
@@ -56,6 +66,20 @@ ws = [\ \t\r\f\v\n];
 <EXPORT>.                   => (err yypos ("illegal character " ^ yytext);
                                 continue());
 
-(* TODO: handling imports *)
+
+<IMPORT>")"                 => (dec nestedParen;
+                                Tokens.RPAREN(yypos, yypos + 1));
+<IMPORT>"from"              => (Tokens.FROM(yypos, yypos + size yytext));
+<IMPORT>{basis}             => (YYBEGIN INITIAL;
+                                Tokens.BAS(yytext, yypos, yypos + size yytext));
+<IMPORT>"\""                => (YYBEGIN STRING;
+                                path := ""; pathPos := yypos; continue());
+<STRING>"\""                => (YYBEGIN INITIAL;
+                                Tokens.PATH(!path, !pathPos, yypos + 1));
+(* TODO: continue handling quoted strings: printable & escape sequences *)
+
+<IMPORT>.                   => (err yypos ("illegal character " ^ yytext);
+                                continue());
+
 
 <INITIAL>.                  => (Tokens.SML (yypos, yypos + 1));
