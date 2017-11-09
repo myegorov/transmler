@@ -5,6 +5,7 @@
 
 import os
 from string import Template, whitespace
+import textwrap as tw
 
 class Parser:
     # config
@@ -18,37 +19,37 @@ class Parser:
             '.sigb': ('.sig', '.mlb')
           }
 
-    IMPORTS = '''
+    IMPORTS = tw.dedent('''
         local
-            $builtin_bases
-            $unfiltered_bases
-            $filtered_bases
-            open $all_bases
+          $builtin_bases
+          $unfiltered_bases
+          $filtered_bases
+          open $all_bases
         in
-            $module
-        end\n'''
+          $module
+        end''')
 
-    EXPORTS = '''
+    EXPORTS = tw.dedent('''
         local
-            $module_imports
+          $module_imports
         in
-            $module_exports
-        end'''
+          $module_exports
+        end''')
 
     BASEXP = 'basis $bas_id = bas $path end'
 
-    LETBAS = '''
+    LETBAS = tw.dedent('''
         basis $bas_id =
-            let
-                $path
-            in
-                bas
-                    $ids
-                end
-            end\n'''
+          let
+            $path
+          in
+            bas
+              $ids
+            end
+          end''')
+    TAB = '  ' # indent each level by two spaces
 
-    MASK = str.maketrans({'(':'', ')':''})
-
+    MASK = str.maketrans({'(':'', ')':''}) # strip out parens
 
     def __init__(self, args):
         self.in_dir = os.path.normpath(args.src)
@@ -145,7 +146,6 @@ class Parser:
             outfile.writelines(lines[start:])
 
     def write_build(self, bases, unfiltered, filtered, exports, outdir, basename, smlext, buildext):
-        # TODO: indent templates properly with textwrap module
         # TODO: add line directives
         all_bases = []
 
@@ -159,7 +159,7 @@ class Parser:
             bas = bas.safe_substitute(bas_id=binding, path=basis)
             builtin_bases.append(bas)
             counter += 1
-        builtin_bases = '\n'.join(builtin_bases)
+        builtin_bases = '\n' + tw.indent('\n'.join(builtin_bases), self.TAB)
 
         # bases of type "/path/to/moduleA.sigb"
         unfiltered_bases = []
@@ -172,19 +172,19 @@ class Parser:
             bas = bas.safe_substitute(bas_id=binding, path=path)
             unfiltered_bases.append(bas)
             counter += 1
-        unfiltered_bases = '\n'.join(unfiltered_bases)
+        unfiltered_bases = '\n' + tw.indent('\n'.join(unfiltered_bases), self.TAB)
 
         # bases of type (functor X, structure Z = Y) from "../path/to/moduleB.funb"
         filtered_bases = []
         counter = 0
         for (basis, identifiers) in filtered:
             path = self.format_mlb_path(basis)
-            ids = '\n'.join([identifier for identifier in identifiers])
+            ids = '\n' + tw.indent('\n'.join([identifier for identifier in identifiers]), 3*self.TAB)
             bas = Template(self.LETBAS)
             binding = 'f'+str(counter)
             all_bases.append(binding)
             bas = bas.safe_substitute(bas_id=binding, path=path, ids=ids)
-            filtered_bases.append(bas)
+            filtered_bases.append(tw.indent(bas, self.TAB))
             counter += 1
         filtered_bases = '\n'.join(filtered_bases)
 
@@ -202,13 +202,14 @@ class Parser:
         if exports:
             mlb = Template(self.EXPORTS)
             mlb = mlb.safe_substitute( # convert Template to string
-                module_imports=imports,
-                module_exports='\n'.join(exports)
+                module_imports=tw.indent(imports, self.TAB),
+                module_exports='\n' + tw.indent('\n'.join(exports), self.TAB)
             )
         else:
             mlb = imports
 
         # write out MLB file
+        mlb = (os.linesep).join([line for line in mlb.splitlines() if line.rstrip()])
         outmlb = os.path.join(outdir, basename) + smlext + buildext
         with open (outmlb, 'w') as outfile:
             outfile.write(mlb)
