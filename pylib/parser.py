@@ -4,12 +4,14 @@
 #   - each import and export statement is assumed to be on a line by itself
 
 import os
-from string import Template
+from string import Template, whitespace
 
 class Parser:
     # config
     SEP = '(* +++ *)' # assumed to be on a line by itself
     BASIS = '$(SML_LIB)/basis/basis.mlb' # default MLBasis
+
+    # use input file suffix to determine the output file suffix
     EXT = {
             '.smlb': ('.sml', '.mlb'),
             '.funb': ('.fun', '.mlb'),
@@ -45,15 +47,18 @@ class Parser:
                 end
             end\n'''
 
+    MASK = str.maketrans({'(':'', ')':''})
+
+
     def __init__(self, args):
         self.in_dir = os.path.normpath(args.src)
         self.out_dir = os.path.normpath(args.out_dir)
+
 
         # TODO: preprocess ignore file list & copy flag
         self.ignore= args.ignore
         self.copy = args.copy
 
-        self.parse()
 
     def parse(self):
         for (infile_path, fname, outdir) in self.walk_dirs():
@@ -70,6 +75,7 @@ class Parser:
                         bases, unfiltered, filtered, exports = self._parse(lines, split_line)
                         sml_start = split_line + 1
 
+                    # write out .mlb, .sml etc
                     self.write_build(bases, unfiltered, filtered, exports, outdir, base, smlext, buildext)
                     self.write_sml(lines, sml_start, outdir, base, smlext)
 
@@ -79,12 +85,13 @@ class Parser:
         filtered = [] # list of tuples (path, [id,...]) for filtered imports
         exports = []
 
-        # TODO
+
         for line in lines:
             line = line.strip()
-            # exports
             if line.startswith('export'):
-                exports.extend(line[len('export'):].strip().strip('()').split(','))
+                ids = [identifier.translate(self.MASK).strip() \
+                        for identifier in line[len('export'):].split(',')]
+                exports.extend(ids)
 
             elif line.startswith('import'):
                 line = line[len('import'):].strip()
@@ -92,21 +99,44 @@ class Parser:
                 if line.startswith('$'):  # basis
                     bases.append(line)
                 elif line.startswith('('): # filtered
-                    filter_end = line.find('from')
-                    path = line[filter_end+len('from'):].strip()
-                    ids = line[:filter_end].strip().strip('()').split(',')
-                    filtered.append((path, ids))
+                    # instead of requiring that 'from' be reserved keyword,
+                    #   match parens
+                    filter_end = self.find_matching_paren(line)
+                    if filter_end < 1:
+                        raise Exception("Unlosed parenthesis in import block?")
+                    remainder = line[filter_end+1:].strip()
+                    if not remainder.startswith('from'):
+                        raise Exception("Expected 'from' in import")
+                    path = remainder[len('from'):].strip()
+                    ids = [identifier.translate(self.MASK).strip() \
+                            for identifier in line[:filter_end+1].split(',')]
+
+                    filtered.append((path, ids[:]))
                 elif line: # unfiltered path
                     unfiltered.append(line)
                 else:
                     raise Exception("Unexpected import format...")
-            else: continue # TODO: handle errors
+            # not robust, will skip newlines & comments,
+            #       but also any unintended errors
+            else: continue
 
         if not bases:
             bases.append(self.BASIS) # default basis
 
         return bases, unfiltered, filtered, exports
 
+    def find_matching_paren(self, line):
+        ''' Returns index in line of closing parenthesis
+        '''
+        ix, counter = 1, 1
+        for char in line[1:]:
+            if char == '(':
+                counter += 1
+            elif char == ')':
+                counter -= 1
+                if counter < 1: break
+            ix += 1
+        return ix if ix < len(line) else -1
 
     def write_sml(self, lines, start, outdir, basename, ext):
         # TODO: add line directives

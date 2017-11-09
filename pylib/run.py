@@ -5,4 +5,4 @@ from parser import Parser
 
 if __name__ == "__main__":
     args = cli.main()
-    parser = Parser(args)
+    Parser(args).parse()
