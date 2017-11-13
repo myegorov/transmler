@@ -4,7 +4,7 @@
 #   - each import and export statement is assumed to be on a line by itself
 
 import os
-from string import Template, whitespace
+from string import Template
 import textwrap as tw
 
 class Parser:
@@ -36,18 +36,21 @@ class Parser:
           $module_exports
         end''')
 
-    BASEXP = 'basis $bas_id = bas $path end'
+    BASEXP = 'basis $bas_id = bas $ldir$path end'
 
     LETBAS = tw.dedent('''
         basis $bas_id =
           let
-            $path
+            $ldir$path
           in
             bas
               $ids
             end
           end''')
+
     TAB = '  ' # indent each level by two spaces
+
+    LDIR = '(*#line %d.%d "%s"*)' # MLton line directive
 
     MASK = str.maketrans({'(':'', ')':''}) # strip out parens
 
@@ -65,11 +68,12 @@ class Parser:
         for (infile_path, fname, outdir) in self.walk_dirs():
             if self.is_stale(infile_path, fname, outdir):
                 with open(infile_path, 'r') as infile:
+                    relpath = os.path.relpath(infile_path, outdir)
                     base, ext = os.path.splitext(fname)
                     smlext, buildext = self.EXT[ext]
                     split_line, lines = self.find_split(infile)
                     if split_line < 0:
-                        bases = [self.BASIS] # default basis
+                        bases = [(self.BASIS, None)] # default basis
                         unfiltered, filtered, exports = [], [], []
                         sml_start = 0 # write out all lines starting with line 0
                     else:
@@ -77,8 +81,8 @@ class Parser:
                         sml_start = split_line + 1
 
                     # write out .mlb, .sml etc
-                    self.write_build(bases, unfiltered, filtered, exports, outdir, base, smlext, buildext)
-                    self.write_sml(lines, sml_start, outdir, base, smlext)
+                    self.write_build(bases, unfiltered, filtered, exports, outdir, base, smlext, buildext, relpath)
+                    self.write_sml(lines, sml_start, outdir, base, smlext, relpath)
 
     def _parse(self, lines, start):
         bases = [] # list of MLBases to import
@@ -87,10 +91,11 @@ class Parser:
         exports = []
 
 
-        for line in lines:
+        for ix, line in enumerate(lines):
+            orig_line = line
             line = line.strip()
             if line.startswith('export'):
-                ids = [identifier.translate(self.MASK).strip() \
+                ids = [(identifier.translate(self.MASK).strip(), (ix+1, orig_line.find(identifier)+1)) \
                         for identifier in line[len('export'):].split(',')]
                 exports.extend(ids)
 
@@ -98,7 +103,7 @@ class Parser:
                 line = line[len('import'):].strip()
 
                 if line.startswith('$'):  # basis
-                    bases.append(line)
+                    bases.append((line, (ix+1, orig_line.find('$')+1)))
                 elif line.startswith('('): # filtered
                     # instead of requiring that 'from' be reserved keyword,
                     #   match parens
@@ -109,12 +114,12 @@ class Parser:
                     if not remainder.startswith('from'):
                         raise Exception("Expected 'from' in import")
                     path = remainder[len('from'):].strip()
-                    ids = [identifier.translate(self.MASK).strip() \
+                    ids = [(identifier.translate(self.MASK).strip(), (ix+1, orig_line.find(identifier)+1)) \
                             for identifier in line[:filter_end+1].split(',')]
 
-                    filtered.append((path, ids[:]))
+                    filtered.append(((path, (ix+1, orig_line.find(path)+1)), ids[:]))
                 elif line: # unfiltered path
-                    unfiltered.append(line)
+                    unfiltered.append((line, (ix+1, orig_line.find(line)+1)))
                 else:
                     raise Exception("Unexpected import format...")
             # not robust, will skip newlines & comments,
@@ -122,7 +127,7 @@ class Parser:
             else: continue
 
         if not bases:
-            bases.append(self.BASIS) # default basis
+            bases.append((self.BASIS, None)) # default basis
 
         return bases, unfiltered, filtered, exports
 
@@ -139,24 +144,35 @@ class Parser:
             ix += 1
         return ix if ix < len(line) else -1
 
-    def write_sml(self, lines, start, outdir, basename, ext):
-        # TODO: add line directives
+    def write_sml(self, lines, start, outdir, basename, ext, relpath):
         outsml = os.path.join(outdir, basename) + ext
+        for line in lines[start:]: # trim leading newlines
+            if not line.strip():
+                start += 1
+            else:
+                break
+
+        if start < len(lines): # add line directive
+            lines[start] = (self.LDIR %(start+1,1,relpath)) + lines[start]
         with open (outsml, 'w') as outfile:
             outfile.writelines(lines[start:])
 
-    def write_build(self, bases, unfiltered, filtered, exports, outdir, basename, smlext, buildext):
-        # TODO: add line directives
+    def write_build(self, bases, unfiltered, filtered, exports, outdir, basename, smlext, buildext, relpath):
         all_bases = []
 
         # bases of type $(SML_LIB)/...
         builtin_bases = []
         counter = 0
-        for basis in bases:
+        for (basis, loc) in bases:
             bas = Template(self.BASEXP)
             binding = 'b'+str(counter)
             all_bases.append(binding)
-            bas = bas.safe_substitute(bas_id=binding, path=basis)
+            if loc is None:
+                line, col = 1, 1
+            else:
+                line, col = loc
+            ldir = (self.LDIR %(line,col,relpath))
+            bas = bas.safe_substitute(bas_id=binding, path=basis, ldir=ldir)
             builtin_bases.append(bas)
             counter += 1
         builtin_bases = '\n' + tw.indent('\n'.join(builtin_bases), self.TAB)
@@ -164,12 +180,17 @@ class Parser:
         # bases of type "/path/to/moduleA.sigb"
         unfiltered_bases = []
         counter = 0
-        for basis in unfiltered:
+        for (basis, loc) in unfiltered:
             path = self.format_mlb_path(basis)
             bas = Template(self.BASEXP)
             binding = 'u'+str(counter)
             all_bases.append(binding)
-            bas = bas.safe_substitute(bas_id=binding, path=path)
+            if loc is None:
+                line, col = 1, 1
+            else:
+                line, col = loc
+            ldir = (self.LDIR %(line,col,relpath))
+            bas = bas.safe_substitute(bas_id=binding, path=path, ldir=ldir)
             unfiltered_bases.append(bas)
             counter += 1
         unfiltered_bases = '\n' + tw.indent('\n'.join(unfiltered_bases), self.TAB)
@@ -178,12 +199,27 @@ class Parser:
         filtered_bases = []
         counter = 0
         for (basis, identifiers) in filtered:
-            path = self.format_mlb_path(basis)
+            path, path_loc = basis
+            if path_loc is None:
+                line, col = 1, 1
+            else:
+                line, col = path_loc
+            path = self.format_mlb_path(path)
+            ldir = (self.LDIR %(line,col,relpath))
+            for i in range(len(identifiers)):
+                identifier, loc = identifiers[i]
+                if loc is None:
+                    line, col = 1, 1
+                else:
+                    line, col = loc
+                newid = self.LDIR %(line,col,relpath) + identifier
+                identifiers[i] = newid
+
             ids = '\n' + tw.indent('\n'.join([identifier for identifier in identifiers]), 3*self.TAB)
             bas = Template(self.LETBAS)
             binding = 'f'+str(counter)
             all_bases.append(binding)
-            bas = bas.safe_substitute(bas_id=binding, path=path, ids=ids)
+            bas = bas.safe_substitute(bas_id=binding, path=path, ids=ids, ldir=ldir)
             filtered_bases.append(tw.indent(bas, self.TAB))
             counter += 1
         filtered_bases = '\n'.join(filtered_bases)
@@ -200,6 +236,15 @@ class Parser:
 
         # create exports block of MLB
         if exports:
+            for i in range(len(exports)):
+                export, loc = exports[i]
+                if loc is None:
+                    line, col = 1, 1
+                else:
+                    line, col = loc
+                ldir = (self.LDIR %(line,col,relpath))
+                exports[i] = ldir+export
+
             mlb = Template(self.EXPORTS)
             mlb = mlb.safe_substitute( # convert Template to string
                 module_imports=tw.indent(imports, self.TAB),

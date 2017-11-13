@@ -27,7 +27,7 @@ class ArgParser(argparse.ArgumentParser):
                 "\nCannot write to {0} directory".format(dir_path))
 
 
-def main():
+def cli():
     parser = ArgParser()
     parser.add_argument('src', type=ArgParser.read_dir,
                         help='transpile files in the source directory')
