@@ -4,19 +4,25 @@
 #   - each import and export statement is assumed to be on a line by itself
 
 import os
-from string import Template
+from string import Template, whitespace
 import textwrap as tw
+from errno import ENOENT
 
 class Parser:
     # config
     SEP = '(* +++ *)' # assumed to be on a line by itself
     BASIS = '$(SML_LIB)/basis/basis.mlb' # default MLBasis
+    SMLPATH = 'SMLPATH' # environmental variable for search path
+    PATH = 'PATH' # $PATH environmental variable for search path
 
     # use input file suffix to determine the output file suffix
     EXT = {
             '.smlb': ('.sml', '.mlb'),
             '.funb': ('.fun', '.mlb'),
-            '.sigb': ('.sig', '.mlb')
+            '.sigb': ('.sig', '.mlb'),
+            '.sml' : ('.sml', ''),
+            '.sig' : ('.sig', ''),
+            '.fun' : ('.fun', '')
           }
 
     IMPORTS = tw.dedent('''
@@ -36,12 +42,12 @@ class Parser:
           $module_exports
         end''')
 
-    BASEXP = 'basis $bas_id = bas $ldir$path end'
+    BASEXP = 'basis $bas_id = bas ${ldir}"${path}" end'
 
     LETBAS = tw.dedent('''
         basis $bas_id =
           let
-            $ldir$path
+            ${ldir}"${path}"
           in
             bas
               $ids
@@ -57,7 +63,6 @@ class Parser:
     def __init__(self, args):
         self.in_dir = os.path.normpath(args.src)
         self.out_dir = os.path.normpath(args.out_dir)
-
 
         # TODO: preprocess ignore file list & copy flag
         self.ignore= args.ignore
@@ -86,7 +91,7 @@ class Parser:
 
     def _parse(self, lines, start):
         bases = [] # list of MLBases to import
-        unfiltered = [] # list of paths to import, TODO: resolve
+        unfiltered = [] # list of paths to import
         filtered = [] # list of tuples (path, [id,...]) for filtered imports
         exports = []
 
@@ -102,7 +107,7 @@ class Parser:
             elif line.startswith('import'):
                 line = line[len('import'):].strip()
 
-                if line.startswith('$'):  # basis
+                if line.startswith('$') or line.startswith ('"$'):  # basis
                     bases.append((line, (ix+1, orig_line.find('$')+1)))
                 elif line.startswith('('): # filtered
                     # instead of requiring that 'from' be reserved keyword,
@@ -172,6 +177,7 @@ class Parser:
             else:
                 line, col = loc
             ldir = (self.LDIR %(line,col,relpath))
+            basis = self.preprocess_path(basis)
             bas = bas.safe_substitute(bas_id=binding, path=basis, ldir=ldir)
             builtin_bases.append(bas)
             counter += 1
@@ -181,7 +187,7 @@ class Parser:
         unfiltered_bases = []
         counter = 0
         for (basis, loc) in unfiltered:
-            path = self.format_mlb_path(basis)
+            path = self.format_mlb_path(self.preprocess_path(basis))
             bas = Template(self.BASEXP)
             binding = 'u'+str(counter)
             all_bases.append(binding)
@@ -204,7 +210,7 @@ class Parser:
                 line, col = 1, 1
             else:
                 line, col = path_loc
-            path = self.format_mlb_path(path)
+            path = self.format_mlb_path(self.preprocess_path(path))
             ldir = (self.LDIR %(line,col,relpath))
             for i in range(len(identifiers)):
                 identifier, loc = identifiers[i]
@@ -260,7 +266,6 @@ class Parser:
             outfile.write(mlb)
 
     def format_mlb_path(self, orig_path):
-        orig_path = orig_path.strip('"\'')
         base, ext = os.path.splitext(orig_path)
         if ext not in self.EXT:
             raise Exception ("\nEncountered unknown file extension {0}".format(ext))
@@ -305,3 +310,34 @@ class Parser:
             for f in files:
                 infile = os.path.join(indir, f)
                 yield (infile, f, outdir)
+
+    def compose_path(self):
+        ''' Returns module search path
+        '''
+        path = [self.in_dir] # search w.r.t. to *b file first
+        if self.SMLPATH in os.environ:
+            path.extend(os.environ[self.SMLPATH].split(os.pathsep))
+        if self.PATH in os.environ:
+            path.extend(os.environ[self.PATH].split(os.pathsep))
+        return path
+
+    def preprocess_path(self, raw_path):
+        ''' Returns path from search or blows up if doesn't exist
+        '''
+        raw_path = raw_path.strip(whitespace + '"')
+        if os.path.isabs(raw_path) or raw_path.startswith('$(SML_LIB)'):
+            return os.path.normpath(raw_path)
+        elif raw_path.startswith('./') or raw_path.startswith('../'):
+            return os.path.normpath(raw_path)
+
+        raw_path = os.path.normpath(raw_path)
+        search_path = self.compose_path()
+        for pth in search_path:
+            test_path = os.path.join(os.path.normpath(pth), raw_path)
+            if os.path.isfile(test_path):
+                # assuming transpiled paths will mirror source/sml_modules directory structure
+                relpath = os.path.relpath(os.path.dirname(test_path), self.in_dir)
+                return os.path.join(relpath, raw_path)
+
+        # exhausted search path
+        raise FileNotFoundError(ENOENT, os.strerror(ENOENT), raw_path)

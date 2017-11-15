@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='transmler',
-      version='0.1',
+      version='0.2',
       description='syntactic sugar for MLBasis files',
       classifiers=[
         'Development Status :: 3 - Alpha',

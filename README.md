@@ -159,19 +159,6 @@ transmile
 - Python prototype:
   * manage SMLPATH, search path resolution for imports
   * misc CLI options (`-c`, `-i`, `--show-path` to print $SMLPATH)
-- create plugin for Valloric/YouCompleteMe or see Ocaml's Merlin for inspiration:
-  * using MLton's `-show-def-use` option: http://mlton.org/EmacsDefUseMode
-  * GoTo commands: `ctags`-like tooling for jumping between the 
-    definitions and uses in the DSL sources;
-  * autocomplete tooltip, use default MLBasis for starters, 
-    i.e. until the file compiles?; suggest all names in current environment
-    that match the prefix (fuzzy search?) and display their type
-  * query for type of expression, displayed in command line
+  * provide an option to output .mlb file targeting -show-basis option
+
 - eventually rewrite transpiler using proper SML lexer + parser
-- start build on save, run typechecker in the background and show
-    stack trace in vim (and write def-use file for successful build):
-  * http://mlton.org/EmacsBgBuildMode
-  * vim-dispatch: https://github.com/tpope/vim-dispatch
-  * Syntastic
-  * https://github.com/MarcWeber/vim-addon-actions
-  * https://github.com/marcweber/vim-addon-sml
