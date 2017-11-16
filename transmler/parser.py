@@ -4,13 +4,14 @@
 #   - each import and export statement is assumed to be on a line by itself
 
 import os
+from shutil import copyfile
 from string import Template, whitespace
 import textwrap as tw
 from errno import ENOENT
 
 class Parser:
     # config
-    SEP = '(* +++ *)' # assumed to be on a line by itself
+    SEP = '%%' # assumed to be on a line by itself
     BASIS = '$(SML_LIB)/basis/basis.mlb' # default MLBasis
     SMLPATH = 'SMLPATH' # environmental variable for search path
     PATH = 'PATH' # $PATH environmental variable for search path
@@ -34,6 +35,13 @@ class Parser:
         in
           $module
         end''')
+
+    IMPORTS_ONLY = tw.dedent('''
+        $builtin_bases
+        $unfiltered_bases
+        $filtered_bases
+        open $all_bases''')
+
 
     EXPORTS = tw.dedent('''
         local
@@ -60,21 +68,34 @@ class Parser:
 
     MASK = str.maketrans({'(':'', ')':''}) # strip out parens
 
+    IGNORE_HIDDEN = True # not cross-platform, only for Linux/Mac .files
+
+    # write out pure import build files (*.mlb) under the prefix
+    BUILD_IMPORTS = '._'
+
     def __init__(self, args):
         self.in_dir = os.path.normpath(args.src)
-        self.out_dir = os.path.normpath(args.out_dir)
+        self.out_dir = os.path.normpath(args.out)
 
-        # TODO: preprocess ignore file list & copy flag
-        self.ignore= args.ignore
+        self.ignore = [] if not args.skip else \
+                      [arg.strip() for arg in args.skip.split(',')]
+
         self.copy = args.copy
+        self.imp = args.imports
 
 
     def parse(self):
         for (infile_path, fname, outdir) in self.walk_dirs():
             if self.is_stale(infile_path, fname, outdir):
+
+                base, ext = os.path.splitext(fname)
+                if ext not in self.EXT:
+                    if self.copy:
+                        copyfile(infile_path, os.path.join(outdir, fname))
+                    continue
+
                 with open(infile_path, 'r') as infile:
                     relpath = os.path.relpath(infile_path, outdir)
-                    base, ext = os.path.splitext(fname)
                     smlext, buildext = self.EXT[ext]
                     split_line, lines = self.find_split(infile)
                     if split_line < 0:
@@ -86,7 +107,8 @@ class Parser:
                         sml_start = split_line + 1
 
                     # write out .mlb, .sml etc
-                    self.write_build(bases, unfiltered, filtered, exports, outdir, base, smlext, buildext, relpath)
+                    if buildext:
+                        self.write_build(bases, unfiltered, filtered, exports, outdir, base, smlext, buildext, relpath)
                     self.write_sml(lines, sml_start, outdir, base, smlext, relpath)
 
     def _parse(self, lines, start):
@@ -240,6 +262,22 @@ class Parser:
             module=basename+smlext
         )
 
+        # create pure imports .mlb file to include basis for imports only
+        if self.imp:
+            pure_imports = Template(self.IMPORTS_ONLY)
+            pure_imports = pure_imports.safe_substitute( # convert Template to string
+                builtin_bases=tw.dedent(builtin_bases),
+                unfiltered_bases=tw.dedent(unfiltered_bases),
+                filtered_bases=tw.dedent(filtered_bases),
+                all_bases=' '.join(all_bases)
+            )
+            # write out MLB file
+            mlb = (os.linesep).join([line for line in pure_imports.splitlines() if line.rstrip()])
+            outmlb = os.path.join(outdir, self.BUILD_IMPORTS + basename) + smlext + buildext
+            os.makedirs(os.path.dirname(outmlb), exist_ok=True)
+            with open (outmlb, 'w') as outfile:
+                outfile.write(mlb)
+
         # create exports block of MLB
         if exports:
             for i in range(len(exports)):
@@ -286,30 +324,52 @@ class Parser:
         ''' Returns True if infile needs to be transpiled else False.
         '''
         base, ext = os.path.splitext(fname)
+        out_candidate = os.path.join(outdir, fname) # for misc file extensions
 
-        if ext not in self.EXT:
-            raise Exception ("\nEncountered unknown file extension {0}".format(ext))
-        smlext, buildext = self.EXT[ext]
-        outsml = os.path.join(outdir, base, smlext)
-        outbuild = os.path.join(outdir, base, buildext)
-        if os.path.isfile(outsml) and os.path.isfile(outbuild) and \
-                os.path.getmtime(outsml) > os.path.getmtime(infile_path) and \
-                os.path.getmtime(outbuild) > os.path.getmtime(infile_path):
-            return False # outfiles are more recent than source
+        if ext in self.EXT:
+            smlext, buildext = self.EXT[ext]
+            outsml = os.path.join(outdir, base, smlext)
+            if buildext: outbuild = os.path.join(outdir, base, buildext)
+            else: outbuild = outsml # .sml, .fun, .sig files
+            if os.path.isfile(outsml) and os.path.isfile(outbuild) and \
+                    os.path.getmtime(outsml) > os.path.getmtime(infile_path) and \
+                    os.path.getmtime(outbuild) > os.path.getmtime(infile_path):
+                return False # outfiles are more recent than source
+            else:
+                return True
+        elif self.copy and os.path.isfile(out_candidate) \
+                and os.path.getmtime(out_candidate) > os.path.getmtime(infile_path):
+            return False # outfiles more recent than source
         else:
             return True
 
+
     def walk_dirs(self):
-        ''' Walk self.in_dir and create same structure in self.out_dir
+        ''' Walk self.in_dir and create same structure in self.out_dir.
+            Possibly ignore files/directories (hidden, skipped).
         '''
         base_len = len(self.in_dir.split(os.sep))
         for indir, dirs, files in os.walk(self.in_dir):
             suffix = os.sep.join(indir.split(os.sep)[base_len:])
+            if self.to_be_ignored(suffix, indir):
+                continue
             outdir = os.path.join(self.out_dir, suffix)
             os.makedirs(outdir, exist_ok=True)
             for f in files:
                 infile = os.path.join(indir, f)
+                if self.to_be_ignored(f, infile):
+                    continue
                 yield (infile, f, outdir)
+
+    def to_be_ignored(self, f, infile):
+        if self.IGNORE_HIDDEN and f.startswith('.'):
+            return True
+
+        infile = os.path.abspath(os.path.normpath(infile))
+        if any(ignore_pattern in infile for ignore_pattern in self.ignore):
+            return True
+
+        return False
 
     def compose_path(self):
         ''' Returns module search path

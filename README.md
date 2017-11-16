@@ -104,7 +104,7 @@ end
 The syntax for exporting entities is along the lines of:
 ```
 export (signature K, structure M = L)
-(* +++ *) (* for the time being signals end of import/export block *)
+%% (* for the time being signals the end of import/export block *)
 ```
 
 Assuming this `export` statement follows the `import` statements in the
@@ -142,8 +142,7 @@ would effectively export all its top-level identifiers.
 
 # Installation
 
-Prerequisites:
-- Python 3
+Currently requires Python 3. (I plan to rewrite the transpiler in SML.)
 
 Clone the repository and run `python transmile.py` to display the
 usage message, or alternatively install with `pip`:
@@ -153,12 +152,4 @@ pip install transmler
 transmile
 ```
 
-
-# Roadmap
-
-- Python prototype:
-  * manage SMLPATH, search path resolution for imports
-  * misc CLI options (`-c`, `-i`, `--show-path` to print $SMLPATH)
-  * provide an option to output .mlb file targeting -show-basis option
-
-- eventually rewrite transpiler using proper SML lexer + parser
+See `./example/` for an extended example.
