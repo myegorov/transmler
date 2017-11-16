@@ -35,7 +35,7 @@ SML=mlton
 
 .PHONY: foo
 foo: src/foo.smlb
-	transmile src --out-dir dist --copy-files --ignore README
+	transmile src --out dist --skip README --copy-files
 	$(SML) -stop tc ./dist/foo.sml.mlb
 ```
 
