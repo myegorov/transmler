@@ -1,0 +1,10 @@
+basis b0 = bas (*#line 1.1 "../../src/example.smlb"*)"$(SML_LIB)/basis/basis.mlb" end
+basis f0 =
+  let
+    (*#line 2.32 "../../src/example.smlb"*)"stack.sml.mlb"
+  in
+    bas
+      (*#line 2.8 "../../src/example.smlb"*)structure Stack'
+    end
+  end
+open b0 f0

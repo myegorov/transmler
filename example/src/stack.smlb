@@ -2,7 +2,7 @@
 import "stack.sigb"
 export (structure Stack' = Stack)
 
-(* +++ *)
+%%
 
 (* http://www.cs.cornell.edu/courses/cs312/2008sp/lectures/lec07.html *)
 structure Stack : STACK =

@@ -11,8 +11,10 @@ Depending on one's workflow and the project's complexity,
 the cognitive load on the programmer may in fact be minimized by
 keeping the import and export statements within the context of
 the module where they apply. In this approach, the link between the
-declarations and their uses is made explicit. In addition, one can
-incrementally type check the program one file at a time,
+declarations and their uses is made explicit. This enforces a certain
+discipline by limiting the unintentional snowballing of names in scope. 
+In addition, one can incrementally type check the program one file at a time,
+perhaps as a background process,
 as suggested in https://sourceforge.net/p/mlton/mailman/message/31513087/
 
 The goal is to develop a proof of concept for a transpiler step added to
@@ -102,7 +104,7 @@ end
 The syntax for exporting entities is along the lines of:
 ```
 export (signature K, structure M = L)
-(* +++ *) (* for the time being signals end of import/export block *)
+%% (* for the time being signals the end of import/export block *)
 ```
 
 Assuming this `export` statement follows the `import` statements in the
@@ -138,12 +140,16 @@ end
 If an `export` statement were missing from `example.smlb`, the module
 would effectively export all its top-level identifiers.
 
+# Installation
 
-# Roadmap
+Currently requires Python 3. (I plan to rewrite the transpiler in SML.)
 
-- simple scripts for prototype
-- `ctags`-like tooling for jumping between the definitions and uses in
-    the DSL sources + autocomplete/show signature;
-- specify the DSL grammar for imports and exports;
-- `transmile` CLI tool (source, destination, ignore/copy, edit/print $SMLPATH)
-- eventually lexer + parser;
+Clone the repository and run `python transmile.py` to display the
+usage message, or alternatively install with `pip`:
+
+```shell
+pip install transmler
+transmile
+```
+
+See `./example/` for an extended example.

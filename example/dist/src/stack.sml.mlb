@@ -1,0 +1,11 @@
+local
+  local
+    basis b0 = bas (*#line 1.1 "../../src/stack.smlb"*)"$(SML_LIB)/basis/basis.mlb" end
+    basis u0 = bas (*#line 2.8 "../../src/stack.smlb"*)"./stack.sig.mlb" end
+    open b0 u0
+  in
+    stack.sml
+  end
+in
+  (*#line 3.7 "../../src/stack.smlb"*)structure Stack' = Stack
+end

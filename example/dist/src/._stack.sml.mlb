@@ -1,0 +1,3 @@
+basis b0 = bas (*#line 1.1 "../../src/stack.smlb"*)"$(SML_LIB)/basis/basis.mlb" end
+basis u0 = bas (*#line 2.8 "../../src/stack.smlb"*)"./stack.sig.mlb" end
+open b0 u0
